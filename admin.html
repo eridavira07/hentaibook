@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Halaman Admin Posting</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+    <div id="auth-container"></div>
+
+    <script>
+        const SECRET_KEY = 'admin-eri-2025';
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        const authContainer = document.getElementById('auth-container');
+        const adminContent = document.createElement('div');
+        adminContent.id = 'admin-content';
+        adminContent.classList.add('js-hidden');
+        document.body.appendChild(adminContent);
+
+        if (getQueryParam('key') !== SECRET_KEY) {
+            authContainer.innerHTML = `
+                <div id="access-denied-message">
+                    <h1>Akses Ditolak</h1>
+                    <p>Anda tidak memiliki izin untuk mengakses halaman ini.</p>
+                </div>
+            `;
+            throw new Error("Akses admin ditolak!");
+        } else {
+            authContainer.remove();
+            adminContent.classList.remove('js-hidden');
+        }
+    </script>
+    
+    <div style="display:none;" id="initial-content">
+        <header>
+            <h1>Admin Panel: Buat Status</h1>
+        </header>
+
+        <main>
+            <section id="form-section">
+                <form id="status-form">
+                    <textarea id="status-text" placeholder="Apa yang ada di pikiranmu?" required></textarea>
+                    <input type="url" id="link-thumbnail" placeholder="Link Gambar Thumbnail (Link 1)" required>
+                    <input type="url" id="link-original" placeholder="Link Gambar Original (Link 2)" required>
+                    <button type="submit">Posting Status</button>
+                </form>
+            </section>
+
+            <hr>
+
+            <h2>Kelola Postingan</h2>
+            <section id="posts-container"></section>
+        </main>
+    </div>
+    
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('edit-modal')">&times;</span>
+            <h3>Edit Postingan</h3>
+            <form id="edit-form">
+                <input type="hidden" id="edit-post-id">
+                
+                <label>Teks Postingan:</label>
+                <textarea id="edit-text"></textarea>
+
+                <label>Jumlah Like Palsu:</label>
+                <input type="number" id="edit-likes" min="0" value="0">
+
+                <label>Jumlah Share Palsu:</label>
+                <input type="number" id="edit-shares" min="0" value="0">
+                
+                <button type="submit" class="action-button">Simpan Perubahan</button>
+            </form>
+
+            <hr>
+            
+            <h4>Tambah Komentar Palsu</h4>
+            <form id="comment-form">
+                <input type="hidden" id="comment-post-id">
+                
+                <label>Nama Pengguna:</label>
+                <input type="text" id="comment-name" required>
+                
+                <label>Teks Komentar:</label>
+                <textarea id="comment-text" required></textarea>
+                
+                <button type="submit" class="action-button">Tambah Komentar</button>
+            </form>
+            
+            <hr>
+            
+            <h4>Daftar Komentar</h4>
+            <div id="comments-list-container"></div>
+        </div>
+    </div>
+
+
+    <script>
+        const initialContent = document.getElementById('initial-content');
+        if (initialContent) {
+            document.getElementById('admin-content').innerHTML = initialContent.innerHTML;
+            initialContent.remove();
+        }
+    
+        if (getQueryParam('key') === SECRET_KEY) {
+            const firebaseConfig = {
+              apiKey: "AIzaSyC6eQQ5KmfNeE-MbbGztfgxUr-Q388QKg4",
+              authDomain: "anon-chat-eri.firebaseapp.com",
+              databaseURL: "https://anon-chat-eri-default-rtdb.asia-southeast1.firebasedatabase.app",
+              projectId: "anon-chat-eri",
+              storageBucket: "anon-chat-eri.appspot.com",
+              messagingSenderId: "770226352457",
+              appId: "1:770226352457:web:43d01526df75e5e49cea98",
+              measurementId: "G-2YRM1KMDDM"
+            };
+
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            const postsRef = database.ref('statuses');
+            
+            
+            const statusForm = document.getElementById('status-form');
+            const editForm = document.getElementById('edit-form');
+            const commentForm = document.getElementById('comment-form');
+            
+            statusForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const newPost = {
+                    text: document.getElementById('status-text').value,
+                    thumbnail: document.getElementById('link-thumbnail').value,
+                    original: document.getElementById('link-original').value,
+                    timestamp: Date.now(),
+                    likes: 0, 
+                    shares: 0 
+                };
+
+                postsRef.push(newPost)
+                    .then(() => {
+                        statusForm.reset();
+                    })
+                    .catch(error => {
+                        alert('Gagal memposting status.');
+                    });
+            });
+
+            editForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const postId = document.getElementById('edit-post-id').value;
+                
+                const updates = {
+                    text: document.getElementById('edit-text').value,
+                    likes: parseInt(document.getElementById('edit-likes').value) || 0,
+                    shares: parseInt(document.getElementById('edit-shares').value) || 0,
+                };
+
+                postsRef.child(postId).update(updates)
+                    .then(() => {
+                        closeModal('edit-modal');
+                    })
+                    .catch(error => {
+                        alert('Gagal memperbarui postingan.');
+                    });
+            });
+
+            commentForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const postId = document.getElementById('comment-post-id').value;
+                
+                const newComment = {
+                    name: document.getElementById('comment-name').value,
+                    text: document.getElementById('comment-text').value,
+                    timestamp: Date.now()
+                };
+
+                postsRef.child(postId).child('comments').push(newComment)
+                    .then(() => {
+                        document.getElementById('comment-form').reset();
+                        loadComments(postId); 
+                    })
+                    .catch(error => {
+                        alert('Gagal menambah komentar palsu.');
+                    });
+            });
+
+
+            postsRef.orderByChild('timestamp').on('child_added', snapshot => {
+                const post = snapshot.val();
+                const postId = snapshot.key;
+                displayPost(postId, post);
+            });
+
+            postsRef.orderByChild('timestamp').on('child_changed', snapshot => {
+                const post = snapshot.val();
+                const postId = snapshot.key;
+                updatePostDisplay(postId, post);
+            });
+
+            postsRef.on('child_removed', snapshot => {
+                const postId = snapshot.key;
+                const postElement = document.getElementById(`post-${postId}`);
+                if (postElement) {
+                    postElement.remove();
+                }
+            });
+            
+            function loadComments(postId) {
+                const commentsListContainer = document.getElementById('comments-list-container');
+                commentsListContainer.innerHTML = 'Memuat komentar...';
+                
+                postsRef.child(postId).child('comments').orderByChild('timestamp').once('value', snapshot => {
+                    commentsListContainer.innerHTML = '';
+                    const commentsArray = [];
+                    
+                    snapshot.forEach(childSnapshot => {
+                        commentsArray.push({
+                            id: childSnapshot.key,
+                            ...childSnapshot.val()
+                        });
+                    });
+
+                    if (commentsArray.length === 0) {
+                        commentsListContainer.innerHTML = '<p>Belum ada komentar palsu.</p>';
+                        return;
+                    }
+
+                    commentsArray.reverse().forEach(comment => {
+                        const commentElement = document.createElement('div');
+                        commentElement.classList.add('comment-item');
+                        commentElement.id = `comment-${comment.id}`;
+                        commentElement.innerHTML = `
+                            <strong>${comment.name}</strong>
+                            <p>${comment.text}</p>
+                            <div class="comment-admin-actions">
+                                <button onclick="deleteComment('${postId}', '${comment.id}')">Hapus</button>
+                            </div>
+                        `;
+                        commentsListContainer.appendChild(commentElement);
+                    });
+                });
+            }
+
+            window.openEditModal = function(postId) {
+                postsRef.child(postId).once('value', snapshot => {
+                    const post = snapshot.val();
+                    if (!post) return;
+                    
+                    document.getElementById('edit-post-id').value = postId;
+                    document.getElementById('edit-text').value = post.text;
+                    document.getElementById('edit-likes').value = post.likes || 0;
+                    document.getElementById('edit-shares').value = post.shares || 0;
+                    
+                    document.getElementById('comment-post-id').value = postId;
+                    document.getElementById('comment-form').reset();
+                    
+                    loadComments(postId);
+                    
+                    document.getElementById('edit-modal').classList.remove('hidden');
+                });
+            }
+            
+            window.deleteComment = function(postId, commentId) {
+                if (confirm("Yakin hapus komentar palsu ini?")) {
+                    postsRef.child(postId).child('comments').child(commentId).remove()
+                        .then(() => {
+                            loadComments(postId); 
+                        })
+                        .catch(error => {
+                        });
+                }
+            }
+            
+            window.closeModal = function(modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+            }
+
+            function updatePostDisplay(id, post) {
+                const postElement = document.getElementById(`post-${id}`);
+                if (!postElement) return;
+
+                postElement.querySelector('.post-text').textContent = post.text;
+                postElement.querySelector('.likes-count').textContent = post.likes || 0;
+                postElement.querySelector('.comments-count').textContent = post.comments ? Object.keys(post.comments).length : 0;
+                postElement.querySelector('.shares-count').textContent = post.shares || 0;
+            }
+
+            function displayPost(id, post) {
+                const container = document.getElementById('posts-container');
+                const postElement = document.createElement('div');
+                postElement.classList.add('post-card');
+                postElement.id = `post-${id}`;
+                
+                const commentCount = post.comments ? Object.keys(post.comments).length : 0;
+
+                postElement.innerHTML = `
+                    <p class="post-text">${post.text}</p>
+                    <div class="image-wrapper">
+                        <img 
+                            src="${post.thumbnail}" 
+                            class="post-image-thumbnail" 
+                            onclick="loadOriginalImage('${id}', '${post.original}')"
+                            alt="Thumbnail"
+                        >
+                        <img 
+                            src="" 
+                            class="post-image-original hidden" 
+                            alt="Gambar Original"
+                        >
+                    </div>
+                    
+                    <div class="post-actions">
+                        <div class="action-item">
+                            ❤️ <span class="likes-count">${post.likes || 0}</span> Like
+                        </div>
+                        <div class="action-item">
+                            💬 <span class="comments-count">${commentCount}</span> Komentar
+                        </div>
+                        <div class="action-item">
+                            📤 <span class="shares-count">${post.shares || 0}</span> Bagikan
+                        </div>
+                    </div>
+
+                    <div class="post-footer">
+                        <small>${new Date(post.timestamp).toLocaleString()}</small>
+                        <div>
+                            <button class="action-button" onclick="openEditModal('${id}')">Edit</button>
+                            <button class="delete-btn" onclick="deletePost('${id}')">Hapus</button>
+                        </div>
+                    </div>
+                `;
+
+                container.prepend(postElement);
+            }
+
+            window.deletePost = function(postId) {
+                if (confirm("Apakah Anda yakin ingin menghapus status ini?")) {
+                    postsRef.child(postId).remove()
+                        .then(() => {
+                        })
+                        .catch(error => {
+                            alert("Terjadi kesalahan saat mencoba menghapus status.");
+                        });
+                }
+            }
+
+            window.loadOriginalImage = function(postId, originalLink) {
+                const postElement = document.getElementById(`post-${postId}`);
+                const thumbnailImg = postElement.querySelector('.post-image-thumbnail');
+                const originalImg = postElement.querySelector('.post-image-original');
+
+                if (originalImg.src === originalLink && !originalImg.classList.contains('hidden')) {
+                    return; 
+                }
+
+                originalImg.src = originalLink;
+
+                originalImg.onload = function() {
+                    thumbnailImg.classList.add('hidden'); 
+                    originalImg.classList.remove('hidden'); 
+                    thumbnailImg.onclick = null;
+                };
+                originalImg.onerror = function() {
+                };
+            };
+        }
+    </script>
+</body>
+</html>

@@ -24,7 +24,7 @@
             <span class="close-btn" onclick="closeModal('comments-modal')">&times;</span>
             <h3>Komentar Palsu</h3>
             <div id="modal-comments-list" class="comments-container">
-                </div>
+            </div>
         </div>
     </div>
 
@@ -42,7 +42,9 @@
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
-        const postsRef = database.ref('statuses').orderByChild('timestamp');
+
+        const postsRefBase = database.ref('statuses'); 
+        const postsRefQuery = postsRefBase.orderByChild('timestamp'); 
 
         const POSTS_PER_LOAD = 5;
         let LAST_KEY_LOADED = null;
@@ -60,17 +62,27 @@
         
         loadPosts();
 
+        // DELEGATED EVENT LISTENER UNTUK TOMBOL KOMENTAR
+        document.addEventListener('click', function(e) {
+            const commentButton = e.target.closest('.comment-trigger');
+            if (commentButton) {
+                const postId = commentButton.getAttribute('data-post-id');
+                openCommentsModal(postId);
+            }
+        });
+
+
         async function loadPosts() {
             loadMoreBtn.disabled = true;
             loadMoreBtn.textContent = 'Memuat...';
 
-            let finalQuery = postsRef;
+            let finalQuery = postsRefQuery;
 
             if (IS_INITIAL_LOAD) {
                 finalQuery = finalQuery.limitToLast(POSTS_PER_LOAD);
             } else if (LAST_KEY_LOADED) {
                 try {
-                    const snapshot = await database.ref('statuses').child(LAST_KEY_LOADED).once('value');
+                    const snapshot = await postsRefBase.child(LAST_KEY_LOADED).once('value');
                     LAST_TIMESTAMP_LOADED = snapshot.val() ? snapshot.val().timestamp : null;
                 } catch (e) {
                     loadMoreBtn.textContent = 'Gagal memuat data.';
@@ -82,7 +94,7 @@
                     return;
                 }
                 
-                finalQuery = postsRef
+                finalQuery = postsRefQuery
                             .endBefore(LAST_TIMESTAMP_LOADED, LAST_KEY_LOADED)
                             .limitToLast(POSTS_PER_LOAD);
 
@@ -160,9 +172,11 @@
                     <div class="action-item">
                         ❤️ <span class="likes-count">${post.likes || 0}</span> Like
                     </div>
-                    <div class="action-item" onclick="openCommentsModal('${id}')" style="cursor: pointer;">
+                    
+                    <div class="action-item comment-trigger" data-post-id="${id}" style="cursor: pointer;">
                         💬 <span class="comments-count">${commentCount}</span> Komentar
                     </div>
+                    
                     <div class="action-item">
                         📤 <span class="shares-count">${post.shares || 0}</span> Bagikan
                     </div>
@@ -185,7 +199,7 @@
             const commentsList = document.getElementById('modal-comments-list');
             commentsList.innerHTML = '<p style="text-align: center;">Memuat komentar...</p>';
 
-            postsRef.child(postId).child('comments').orderByChild('timestamp').once('value', snapshot => {
+            postsRefBase.child(postId).child('comments').orderByChild('timestamp').once('value', snapshot => {
                 commentsList.innerHTML = '';
                 const commentsArray = [];
                 
@@ -202,7 +216,6 @@
                     return;
                 }
 
-                // Tampilkan komentar terbaru di atas
                 commentsArray.reverse().forEach(comment => {
                     const commentElement = document.createElement('div');
                     commentElement.classList.add('comment-item');
@@ -216,7 +229,7 @@
                 modal.classList.remove('hidden');
             });
         }
-        
+
         window.loadOriginalImage = function(postId, originalLink) {
             const postElement = document.getElementById(`post-${postId}`);
             const thumbnailImg = postElement.querySelector('.post-image-thumbnail');

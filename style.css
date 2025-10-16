@@ -222,6 +222,9 @@ small {
     overflow: auto;
     background-color: rgba(0, 0, 0, 0.8);
     padding-top: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 .modal-content {
@@ -250,7 +253,8 @@ small {
 }
 
 .modal-content input[type="number"],
-.modal-content textarea {
+.modal-content textarea,
+.modal-content input[type="text"] {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
