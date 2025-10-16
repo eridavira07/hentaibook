@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Halaman Posting Status Sederhana</title>
+    <link rel="stylesheet" href="style.css"> <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Buat Status Baru</h1>
+    </header>
+
+    <main>
+        <section id="form-section">
+            <form id="status-form">
+                <textarea id="status-text" placeholder="Apa yang ada di pikiranmu?" required></textarea>
+                <input type="url" id="link-thumbnail" placeholder="Link Gambar Thumbnail (Link 1)" required>
+                <input type="url" id="link-original" placeholder="Link Gambar Original (Link 2)" required>
+                <button type="submit">Posting Status</button>
+            </form>
+        </section>
+
+        <hr>
+
+        <h2>Dinding Status</h2>
+        <section id="posts-container"></section>
+    </main>
+
+    <script>
+        // ==========================================================
+        // KONFIGURASI DAN INISIALISASI FIREBASE
+        // ==========================================================
+        const firebaseConfig = {
+          apiKey: "AIzaSyC6eQQ5KmfNeE-MbbGztfgxUr-Q388QKg4",
+          authDomain: "anon-chat-eri.firebaseapp.com",
+          databaseURL: "https://anon-chat-eri-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "anon-chat-eri",
+          storageBucket: "anon-chat-eri.appspot.com",
+          messagingSenderId: "770226352457",
+          appId: "1:770226352457:web:43d01526df75e5e49cea98",
+          measurementId: "G-2YRM1KMDDM"
+        };
+
+        // Inisialisasi Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        // Referensi database ke node 'statuses'
+        const database = firebase.database();
+        const postsRef = database.ref('statuses');
+        
+        
+        // ==========================================================
+        // LOGIKA PENGIRIMAN STATUS
+        // ==========================================================
+        const statusForm = document.getElementById('status-form');
+        const statusText = document.getElementById('status-text');
+        const linkThumbnail = document.getElementById('link-thumbnail');
+        const linkOriginal = document.getElementById('link-original');
+
+        statusForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const newPost = {
+                text: statusText.value,
+                thumbnail: linkThumbnail.value,
+                original: linkOriginal.value,
+                timestamp: Date.now()
+            };
+
+            // Menyimpan data ke Firebase
+            postsRef.push(newPost)
+                .then(() => {
+                    alert('Status berhasil diposting!');
+                    statusForm.reset();
+                })
+                .catch(error => {
+                    console.error("Gagal menyimpan data:", error);
+                    alert('Gagal memposting status.');
+                });
+        });
+
+
+        // ==========================================================
+        // LOGIKA MENAMPILKAN DAN MENGGANTI GAMBAR
+        // ==========================================================
+        
+        // 1. Mendengarkan perubahan data di Firebase (Realtime)
+        postsRef.on('child_added', snapshot => {
+            const post = snapshot.val();
+            const postId = snapshot.key;
+            
+            // Tampilkan postingan baru di halaman
+            displayPost(postId, post.text, post.thumbnail, post.original, post.timestamp);
+        });
+
+
+        // 2. Fungsi untuk membuat dan menampilkan satu postingan
+        function displayPost(id, text, thumbnail, original, timestamp) {
+            const container = document.getElementById('posts-container');
+
+            const postElement = document.createElement('div');
+            postElement.classList.add('post-card');
+            postElement.id = `post-${id}`;
+            
+            // Struktur HTML postingan
+            postElement.innerHTML = `
+                <p class="post-text">${text}</p>
+                <div class="image-wrapper">
+                    <img 
+                        src="${thumbnail}" 
+                        class="post-image-thumbnail" 
+                        onclick="loadOriginalImage('${id}', '${original}')"
+                        alt="Thumbnail"
+                    >
+                    <img 
+                        src="" 
+                        class="post-image-original hidden" 
+                        alt="Gambar Original"
+                    >
+                </div>
+                <small>${new Date(timestamp).toLocaleString()}</small>
+                <hr>
+            `;
+
+            // Tambahkan postingan ke bagian paling atas (terbaru di atas)
+            container.prepend(postElement);
+        }
+
+
+        // 3. Fungsi Utama: Mengganti gambar thumbnail dengan gambar original
+        window.loadOriginalImage = function(postId, originalLink) {
+            const postElement = document.getElementById(`post-${postId}`);
+            const thumbnailImg = postElement.querySelector('.post-image-thumbnail');
+            const originalImg = postElement.querySelector('.post-image-original');
+
+            // Cek apakah gambar original sudah dimuat
+            if (originalImg.src === originalLink && !originalImg.classList.contains('hidden')) {
+                return; // Sudah dimuat, jangan lakukan apa-apa
+            }
+
+            // Muat gambar original
+            originalImg.src = originalLink;
+
+            // Tunggu hingga gambar original selesai dimuat
+            originalImg.onload = function() {
+                // Sembunyikan gambar thumbnail
+                thumbnailImg.classList.add('hidden'); 
+                // Tampilkan gambar original
+                originalImg.classList.remove('hidden'); 
+                
+                // Opsional: Nonaktifkan fungsi klik pada area tersebut
+                thumbnailImg.onclick = null;
+            };
+        };
+    </script>
+</body>
+</html>
