@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinding Status (Tampilan Saja)</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Dinding Status Anonim</h1>
+    </header>
+
+    <main>
+        <section id="posts-container"></section>
+    </main>
+
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyC6eQQ5KmfNeE-MbbGztfgxUr-Q388QKg4",
+          authDomain: "anon-chat-eri.firebaseapp.com",
+          databaseURL: "https://anon-chat-eri-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "anon-chat-eri",
+          storageBucket: "anon-chat-eri.appspot.com",
+          messagingSenderId: "770226352457",
+          appId: "1:770226352457:web:43d01526df75e5e49cea98",
+          measurementId: "G-2YRM1KMDDM"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const postsRef = database.ref('statuses').orderByChild('timestamp');
+
+        const POSTS_PER_LOAD = 5;
+        let LAST_KEY_LOADED = null;
+        let IS_INITIAL_LOAD = true;
+
+        const container = document.getElementById('posts-container');
+        
+        
+        const loadMoreBtn = document.createElement('button');
+        loadMoreBtn.id = 'load-more-btn';
+        loadMoreBtn.textContent = 'Muat Lebih Banyak Status';
+        loadMoreBtn.onclick = loadPosts;
+        container.after(loadMoreBtn);
+        
+        loadPosts();
+
+        function loadPosts() {
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.textContent = 'Memuat...';
+
+            let query = postsRef;
+
+            if (IS_INITIAL_LOAD) {
+                query = query.limitToLast(POSTS_PER_LOAD);
+            } else {
+                query = query.endBefore(LAST_KEY_LOADED).limitToLast(POSTS_PER_LOAD);
+            }
+
+            query.once('value', snapshot => {
+                const postsArray = [];
+                
+                snapshot.forEach(childSnapshot => {
+                    postsArray.push({
+                        id: childSnapshot.key,
+                        ...childSnapshot.val()
+                    });
+                });
+
+                const numResults = postsArray.length;
+                
+                if (numResults > 0) {
+                    LAST_KEY_LOADED = postsArray[0].id; 
+
+                    postsArray.reverse(); 
+
+                    postsArray.forEach(post => {
+                        displayPost(post.id, post.text, post.thumbnail, post.original, post.timestamp);
+                    });
+                    
+                    IS_INITIAL_LOAD = false; 
+                }
+                
+                if (numResults < POSTS_PER_LOAD) {
+                    loadMoreBtn.textContent = 'Tidak ada lagi status yang tersedia.';
+                    loadMoreBtn.disabled = true;
+                    loadMoreBtn.style.opacity = 0.5;
+                } else {
+                    loadMoreBtn.textContent = 'Muat Lebih Banyak Status';
+                    loadMoreBtn.disabled = false;
+                }
+                
+                if (IS_INITIAL_LOAD && numResults === 0) {
+                     container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Belum ada status yang diposting.</p>';
+                     loadMoreBtn.style.display = 'none';
+                }
+            });
+        }
+        
+        function displayPost(id, text, thumbnail, original, timestamp) {
+            const postElement = document.createElement('div');
+            postElement.classList.add('post-card');
+            postElement.id = `post-${id}`;
+            
+            postElement.innerHTML = `
+                <p class="post-text">${text}</p>
+                <div class="image-wrapper">
+                    <img 
+                        src="${thumbnail}" 
+                        class="post-image-thumbnail" 
+                        onclick="loadOriginalImage('${id}', '${original}')"
+                        alt="Thumbnail"
+                    >
+                    <img 
+                        src="" 
+                        class="post-image-original hidden" 
+                        alt="Gambar Original"
+                    >
+                </div>
+                
+                <div class="post-footer">
+                    <small>${new Date(timestamp).toLocaleString()}</small>
+                </div>
+            `;
+
+            container.appendChild(postElement); 
+        }
+
+        window.loadOriginalImage = function(postId, originalLink) {
+            const postElement = document.getElementById(`post-${postId}`);
+            const thumbnailImg = postElement.querySelector('.post-image-thumbnail');
+            const originalImg = postElement.querySelector('.post-image-original');
+
+            if (originalImg.src === originalLink && !originalImg.classList.contains('hidden')) {
+                return; 
+            }
+
+            originalImg.src = originalLink;
+
+            originalImg.onload = function() {
+                thumbnailImg.classList.add('hidden'); 
+                originalImg.classList.remove('hidden'); 
+                thumbnailImg.onclick = null;
+            };
+            originalImg.onerror = function() {
+                console.error("Gagal memuat gambar original dari link:", originalLink);
+            };
+        };
+    </script>
+</body>
+</html>
