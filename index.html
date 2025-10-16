@@ -3,36 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Halaman Posting Status Sederhana</title>
-    <link rel="stylesheet" href="style.css"> <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <title>Dinding Status (Publik)</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>Buat Status Baru</h1>
+        <h1>Dinding Status Anonim</h1>
     </header>
 
     <main>
-        <section id="form-section">
-            <form id="status-form">
-                <textarea id="status-text" placeholder="Apa yang ada di pikiranmu?" required></textarea>
-                <input type="url" id="link-thumbnail" placeholder="Link Gambar Thumbnail (Link 1)" required>
-                <input type="url" id="link-original" placeholder="Link Gambar Original (Link 2)" required>
-                <button type="submit">Posting Status</button>
-            </form>
-        </section>
-
-        <hr>
-
-        <h2>Dinding Status</h2>
         <section id="posts-container"></section>
     </main>
+    
+    <div id="comments-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('comments-modal')">&times;</span>
+            <h3>Komentar Palsu</h3>
+            <div id="modal-comments-list" class="comments-container">
+                </div>
+        </div>
+    </div>
 
     <script>
-        // ==========================================================
-        // KONFIGURASI DAN INISIALISASI FIREBASE
-        // ==========================================================
         const firebaseConfig = {
           apiKey: "AIzaSyC6eQQ5KmfNeE-MbbGztfgxUr-Q388QKg4",
           authDomain: "anon-chat-eri.firebaseapp.com",
@@ -44,75 +40,113 @@
           measurementId: "G-2YRM1KMDDM"
         };
 
-        // Inisialisasi Firebase
         firebase.initializeApp(firebaseConfig);
-
-        // Referensi database ke node 'statuses'
         const database = firebase.database();
-        const postsRef = database.ref('statuses');
+        const postsRef = database.ref('statuses').orderByChild('timestamp');
+
+        const POSTS_PER_LOAD = 5;
+        let LAST_KEY_LOADED = null;
+        let LAST_TIMESTAMP_LOADED = null;
+        let IS_INITIAL_LOAD = true;
+
+        const container = document.getElementById('posts-container');
         
         
-        // ==========================================================
-        // LOGIKA PENGIRIMAN STATUS
-        // ==========================================================
-        const statusForm = document.getElementById('status-form');
-        const statusText = document.getElementById('status-text');
-        const linkThumbnail = document.getElementById('link-thumbnail');
-        const linkOriginal = document.getElementById('link-original');
+        const loadMoreBtn = document.createElement('button');
+        loadMoreBtn.id = 'load-more-btn';
+        loadMoreBtn.textContent = 'Muat Lebih Banyak Status';
+        loadMoreBtn.onclick = loadPosts;
+        container.after(loadMoreBtn);
+        
+        loadPosts();
 
-        statusForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+        async function loadPosts() {
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.textContent = 'Memuat...';
 
-            const newPost = {
-                text: statusText.value,
-                thumbnail: linkThumbnail.value,
-                original: linkOriginal.value,
-                timestamp: Date.now()
-            };
+            let finalQuery = postsRef;
 
-            // Menyimpan data ke Firebase
-            postsRef.push(newPost)
-                .then(() => {
-                    alert('Status berhasil diposting!');
-                    statusForm.reset();
-                })
-                .catch(error => {
-                    console.error("Gagal menyimpan data:", error);
-                    alert('Gagal memposting status.');
+            if (IS_INITIAL_LOAD) {
+                finalQuery = finalQuery.limitToLast(POSTS_PER_LOAD);
+            } else if (LAST_KEY_LOADED) {
+                try {
+                    const snapshot = await database.ref('statuses').child(LAST_KEY_LOADED).once('value');
+                    LAST_TIMESTAMP_LOADED = snapshot.val() ? snapshot.val().timestamp : null;
+                } catch (e) {
+                    loadMoreBtn.textContent = 'Gagal memuat data.';
+                    return;
+                }
+
+                if (!LAST_TIMESTAMP_LOADED) {
+                    loadMoreBtn.textContent = 'Tidak ada lagi status yang tersedia.';
+                    return;
+                }
+                
+                finalQuery = postsRef
+                            .endBefore(LAST_TIMESTAMP_LOADED, LAST_KEY_LOADED)
+                            .limitToLast(POSTS_PER_LOAD);
+
+            } else {
+                loadMoreBtn.textContent = 'Tidak ada lagi status yang tersedia.';
+                return;
+            }
+
+            finalQuery.once('value', snapshot => {
+                const postsArray = [];
+                
+                snapshot.forEach(childSnapshot => {
+                    postsArray.push({
+                        id: childSnapshot.key,
+                        ...childSnapshot.val()
+                    });
                 });
-        });
 
+                const numResults = postsArray.length;
+                
+                if (numResults > 0) {
+                    const oldestPost = postsArray[0];
+                    LAST_KEY_LOADED = oldestPost.id; 
 
-        // ==========================================================
-        // LOGIKA MENAMPILKAN DAN MENGGANTI GAMBAR
-        // ==========================================================
+                    postsArray.reverse(); 
+
+                    postsArray.forEach(post => {
+                        displayPost(post.id, post);
+                    });
+                    
+                    IS_INITIAL_LOAD = false; 
+                }
+                
+                if (numResults < POSTS_PER_LOAD) {
+                    loadMoreBtn.textContent = 'Tidak ada lagi status yang tersedia.';
+                    loadMoreBtn.disabled = true;
+                    loadMoreBtn.style.opacity = 0.5;
+                } else {
+                    loadMoreBtn.textContent = 'Muat Lebih Banyak Status';
+                    loadMoreBtn.disabled = false;
+                }
+                
+                if (IS_INITIAL_LOAD && numResults === 0) {
+                     container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Belum ada status yang diposting.</p>';
+                     loadMoreBtn.style.display = 'none';
+                }
+            });
+        }
         
-        // 1. Mendengarkan perubahan data di Firebase (Realtime)
-        postsRef.on('child_added', snapshot => {
-            const post = snapshot.val();
-            const postId = snapshot.key;
+        function displayPost(id, post) {
+            const comments = post.comments || {};
+            const commentCount = Object.keys(comments).length;
             
-            // Tampilkan postingan baru di halaman
-            displayPost(postId, post.text, post.thumbnail, post.original, post.timestamp);
-        });
-
-
-        // 2. Fungsi untuk membuat dan menampilkan satu postingan
-        function displayPost(id, text, thumbnail, original, timestamp) {
-            const container = document.getElementById('posts-container');
-
             const postElement = document.createElement('div');
             postElement.classList.add('post-card');
             postElement.id = `post-${id}`;
             
-            // Struktur HTML postingan
             postElement.innerHTML = `
-                <p class="post-text">${text}</p>
+                <p class="post-text">${post.text}</p>
                 <div class="image-wrapper">
                     <img 
-                        src="${thumbnail}" 
+                        src="${post.thumbnail}" 
                         class="post-image-thumbnail" 
-                        onclick="loadOriginalImage('${id}', '${original}')"
+                        onclick="loadOriginalImage('${id}', '${post.original}')"
                         alt="Thumbnail"
                     >
                     <img 
@@ -121,38 +155,85 @@
                         alt="Gambar Original"
                     >
                 </div>
-                <small>${new Date(timestamp).toLocaleString()}</small>
-                <hr>
+                
+                <div class="post-actions">
+                    <div class="action-item">
+                        ❤️ <span class="likes-count">${post.likes || 0}</span> Like
+                    </div>
+                    <div class="action-item" onclick="openCommentsModal('${id}')" style="cursor: pointer;">
+                        💬 <span class="comments-count">${commentCount}</span> Komentar
+                    </div>
+                    <div class="action-item">
+                        📤 <span class="shares-count">${post.shares || 0}</span> Bagikan
+                    </div>
+                </div>
+
+                <div class="post-footer">
+                    <small>${new Date(post.timestamp).toLocaleString()}</small>
+                </div>
             `;
 
-            // Tambahkan postingan ke bagian paling atas (terbaru di atas)
-            container.prepend(postElement);
+            container.appendChild(postElement); 
         }
 
+        window.closeModal = function(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
 
-        // 3. Fungsi Utama: Mengganti gambar thumbnail dengan gambar original
+        window.openCommentsModal = function(postId) {
+            const modal = document.getElementById('comments-modal');
+            const commentsList = document.getElementById('modal-comments-list');
+            commentsList.innerHTML = '<p style="text-align: center;">Memuat komentar...</p>';
+
+            postsRef.child(postId).child('comments').orderByChild('timestamp').once('value', snapshot => {
+                commentsList.innerHTML = '';
+                const commentsArray = [];
+                
+                snapshot.forEach(childSnapshot => {
+                    commentsArray.push({
+                        id: childSnapshot.key,
+                        ...childSnapshot.val()
+                    });
+                });
+                
+                if (commentsArray.length === 0) {
+                    commentsList.innerHTML = '<p style="text-align: center;">Belum ada komentar.</p>';
+                    modal.classList.remove('hidden');
+                    return;
+                }
+
+                // Tampilkan komentar terbaru di atas
+                commentsArray.reverse().forEach(comment => {
+                    const commentElement = document.createElement('div');
+                    commentElement.classList.add('comment-item');
+                    commentElement.innerHTML = `
+                        <strong>${comment.name}</strong>
+                        <p>${comment.text}</p>
+                    `;
+                    commentsList.appendChild(commentElement);
+                });
+
+                modal.classList.remove('hidden');
+            });
+        }
+        
         window.loadOriginalImage = function(postId, originalLink) {
             const postElement = document.getElementById(`post-${postId}`);
             const thumbnailImg = postElement.querySelector('.post-image-thumbnail');
             const originalImg = postElement.querySelector('.post-image-original');
 
-            // Cek apakah gambar original sudah dimuat
             if (originalImg.src === originalLink && !originalImg.classList.contains('hidden')) {
-                return; // Sudah dimuat, jangan lakukan apa-apa
+                return; 
             }
 
-            // Muat gambar original
             originalImg.src = originalLink;
 
-            // Tunggu hingga gambar original selesai dimuat
             originalImg.onload = function() {
-                // Sembunyikan gambar thumbnail
                 thumbnailImg.classList.add('hidden'); 
-                // Tampilkan gambar original
                 originalImg.classList.remove('hidden'); 
-                
-                // Opsional: Nonaktifkan fungsi klik pada area tersebut
                 thumbnailImg.onclick = null;
+            };
+            originalImg.onerror = function() {
             };
         };
     </script>
